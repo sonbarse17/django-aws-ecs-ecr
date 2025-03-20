@@ -1,7 +1,12 @@
 # ...existing code...
 INSTALLED_APPS = [
     # ...existing code...
-    "django.contrib.staticfiles",
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',  # This must be present
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
     "hello",
 ]
 # ...existing code...
