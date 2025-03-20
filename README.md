@@ -4,140 +4,292 @@
 
 **This article will deploy a Django-based application onto AWS using ECS (Elastic Container Service) and ECR (Elastic Container Registry). We start by creating the docker image of our application and pushing it to ECR. After that, we create the instance and deploy the application on AWS using ECS. Next, we ensure the application is running correctly using Django’s built-in web server.**
 
-## Prerequisite
 
-* Django
-* Background on Docker
-* AWS Account
-* Creativity is always a plus 😃
 
-## Django Web Framework
+# Comprehensive Guide: Deploying Django Applications on AWS with ECS and ECR
 
-***Django is a high-level Python web framework that encourages rapid development and clean, pragmatic design. It is free and open-source, has a thriving and active community, great documentation, and many free and paid-for support options. It uses HTML/CSS/Javascript for the frontend and python for the backend.***
+This guide provides detailed, step-by-step instructions for deploying a Django application on AWS using Elastic Container Service (ECS) and Elastic Container Registry (ECR).
 
-## What are Dockers and Containers?
+## Table of Contents
+1. [Prerequisites](#prerequisites)
+2. [Understanding the Core Technologies](#understanding-the-core-technologies)
+3. [Phase 1: Preparing Your Django Application](#phase-1-preparing-your-django-application)
+4. [Phase 2: Docker Configuration](#phase-2-docker-configuration)
+5. [Phase 3: AWS ECR Setup](#phase-3-aws-ecr-setup)
+6. [Phase 4: AWS ECS Configuration](#phase-4-aws-ecs-configuration)
+7. [Phase 5: Verification and Testing](#phase-5-verification-and-testing)
+8. [Production Considerations](#production-considerations)
+9. [Troubleshooting](#troubleshooting)
 
-![Docker](https://imgur.com/raGErLx.png)
+## Prerequisites
 
-### Docker Workflow
+Before beginning the deployment process, ensure you have:
 
-**Docker is an open platform software. It is used for developing, shipping, and running applications. Docker virtualizes the operating system of the computer on which it is installed and running. It provides the ability to package and run an application in a loosely isolated environment called a container. A container is a runnable instance of a docker image. You can create, start, stop, move, or delete a container using the Docker API or CLI. You can connect a container to one or more networks, attach storage to it, or even create a new docker image based on its current state.**
+- An AWS account with appropriate permissions
+- AWS CLI installed and configured on your local machine
+- Docker installed and running on your development environment
+- A functional Django application ready for deployment
+- Basic understanding of containerization concepts
+- AWS access and secret keys with appropriate permissions
 
-## What is AWS Elastic Container Registry?
+## Understanding the Core Technologies
 
-**Amazon Elastic Container Registry (Amazon ECR) is a managed container image registry service. Customers can use the familiar Docker CLI, or their preferred client, to push, pull, and manage images. Amazon ECR provides a secure, scalable, and reliable registry for your Docker images.**
+### Django
+Django is a high-level Python web framework that facilitates rapid development with a clean, pragmatic design philosophy. It handles much of the complexity of web development, allowing you to focus on writing your application without reinventing the wheel.
 
-### ECR Steps
+### Docker
+Docker provides platform-as-a-service products that use OS-level virtualization to deliver software in containers. Containers bundle an application's code together with the related configuration files and libraries, and with the dependencies required for the application to run.
 
-Here comes the task in which we create the repository on AWS using ECR where our application docker image will reside. To begin with the creation of a repository on ECR we first search ECR on AWS console and follows the below steps.
+### AWS ECR (Elastic Container Registry)
+Amazon ECR is a fully managed container registry that makes it easy to store, manage, and deploy Docker images. It integrates seamlessly with ECS, simplifying your development to production workflow.
 
-1. **Create a Docker File** — Add the “Dockerfile” to the Django application. It contains the series of command which will be required for the creation of docker image.
+### AWS ECS (Elastic Container Service)
+Amazon ECS is a highly scalable, fast container management service that makes it easy to run, stop, and manage Docker containers on a cluster. With ECS, you can host your containers on a serverless infrastructure managed by AWS.
 
-2. **Build your Docker Image** — Use the below command to create the docker image name as “django-app:version:1”.
+## Phase 1: Preparing Your Django Application
 
-```
-docker build -t hello-world-django-app:version-1 
-```
+1. **Ensure your Django application is production-ready:**
+   - Debug mode is set to False in settings.py
+   - Static files are properly configured
+   - Database settings are environment-variable driven
+   - Secret keys and credentials are not hardcoded
 
-3. Check whether the docker image is created or not using the below command.
+2. **Create a requirements.txt file** to list all Python dependencies:
+   ```bash
+   pip freeze > requirements.txt
+   ```
 
-```
-docker images | grep hello-world-django-app 
-```
+3. **Configure environment variables** for sensitive information:
+   - Create a `.env` file for local development
+   - Plan to use AWS Parameter Store or Secrets Manager for production
 
-4. **Create Repository on AWS ECR** — It's time to open the AWS console and search for ECR. Then, click on the Create Repository button.
+## Phase 2: Docker Configuration
 
-**You will find two options for the visibility of your repository i.e, Private and Public. The Private repository access is managed by IAM and repository policy permissions. Once you click on create repository button then, you need to give the name of your repository. If you enabled the scan on push option then, it helps in identifying software vulnerabilities in your container images**
+1. **Create a Dockerfile** in the root directory of your Django project:
 
-5. **Push the created docker image of the Django application on Step 2 to AWS ECR** —
+   ```dockerfile
+   # Use an official Python runtime as a parent image
+   FROM python:3.9-slim
+   
+   # Set environment variables
+   ENV PYTHONUNBUFFERED=1 \
+       PYTHONDONTWRITEBYTECODE=1 \
+       DJANGO_SETTINGS_MODULE=yourproject.settings
+   
+   # Set work directory
+   WORKDIR /app
+   
+   # Install dependencies
+   COPY requirements.txt /app/
+   RUN pip install --no-cache-dir -r requirements.txt
+   
+   # Copy project
+   COPY . /app/
+   
+   # Collect static files
+   RUN python manage.py collectstatic --noinput
+   
+   # Run gunicorn
+   CMD ["gunicorn", "--bind", "0.0.0.0:8000", "yourproject.wsgi:application"]
+   ```
 
-a) Authenticate your Docker client to the Amazon ECR registry. Authentication tokens must be obtained for each registry used, and these tokens are valid for 12 hours. The easiest way of doing this is to get the AWS `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Then run the below command.
+2. **Build your Docker image** using the following command:
+   ```bash
+   docker build -t hello-world-django-app:version-1 .
+   ```
 
-```
-export AWS_ACCESS_KEY_ID=******
-export AWS_SECRET_ACCESS_KEY=******
-```
+3. **Verify the image was created successfully:**
+   ```bash
+   docker images | grep hello-world-django-app
+   ```
 
-After exporting the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, login to the AWS account using the below command.
+4. **Test your containerized application locally:**
+   ```bash
+   docker run -p 8000:8000 hello-world-django-app:version-1
+   ```
+   Access http://localhost:8000 in your browser to verify the application works correctly.
 
-```
-aws ecr get-login-password --region region | docker login --username AWS --password-stdin aws_account_id.dkr.ecr.region.amazonaws.com
-```
+## Phase 3: AWS ECR Setup
 
-b) Identify the image to push using the **docker images** command:
+1. **Create a repository in ECR:**
+   - Navigate to the AWS Management Console
+   - Search for "ECR" and select the service
+   - Click "Create repository"
+   - Choose visibility (Private recommended for most applications)
+   - Enter a repository name (e.g., "hello-world-django-app")
+   - Configure scan on push settings (recommended for security)
+   - Click "Create repository"
 
-```
-REPOSITORY                                                                TAG                     IMAGE ID          CREATED            SIZE
-django-app version-1    480903dd8        2 days ago          549MB
-```
+2. **Authenticate Docker with ECR:**
+   - Set your AWS credentials as environment variables:
+     ```bash
+     export AWS_ACCESS_KEY_ID=your_access_key_id
+     export AWS_SECRET_ACCESS_KEY=your_secret_access_key
+     ```
 
-c) Tag your image with the Amazon ECR registry, repository, and optional image tag name combination to use. The registry format is `aws_account_id.dkr.ecr.region.amazonaws.com`. The repository name should match the repository that you created for your image.
+   - Authenticate Docker to your ECR registry:
+     ```bash
+     aws ecr get-login-password --region your_region | docker login --username AWS --password-stdin your_aws_account_id.dkr.ecr.your_region.amazonaws.com
+     ```
+     Replace `your_region` with your AWS region (e.g., us-east-1) and `your_aws_account_id` with your AWS account ID.
 
-The following example tags an image with the ID `480903dd8` as `aws_account_id.dkr.ecr.region.amazonaws.com/hello-world-django-app`.
+3. **Tag your Docker image for ECR:**
+   - Identify your image ID first:
+     ```bash
+     docker images | grep hello-world-django-app
+     ```
+   
+   - Tag the image:
+     ```bash
+     docker tag hello-world-django-app:version-1 your_aws_account_id.dkr.ecr.your_region.amazonaws.com/hello-world-django-app:latest
+     ```
 
-```
-docker tag 480903dd8 aws_account_id.dkr.ecr.region.amazonaws.com/hello-world-django-app
-```
+4. **Push the image to ECR:**
+   ```bash
+   docker push your_aws_account_id.dkr.ecr.your_region.amazonaws.com/hello-world-django-app:latest
+   ```
 
-d) Push the docker image using the **docker push** command:
+5. **Verify the push was successful** by checking your ECR repository in the AWS Console.
 
-```
-docker push aws_account_id.dkr.ecr.region.amazonaws.com/hello-world-django-app
-```
+## Phase 4: AWS ECS Configuration
 
-## What is AWS Elastic Container Service?
+1. **Create an ECS Cluster:**
+   - Navigate to the ECS service in the AWS Console
+   - Click "Create Cluster"
+   - Select "EC2 Linux + Networking" as the cluster template
+   - Configure the following:
+     - Cluster name (e.g., "django-app-cluster")
+     - EC2 instance type (start with t2.micro for testing)
+     - Number of instances (1 for testing)
+     - VPC configuration (use default or specify your own)
+     - Security group settings (ensure port 8000 is accessible)
+     - IAM role for EC2 instances (create new or use existing with appropriate permissions)
+   - Click "Create"
 
-**Amazon Elastic Container Service (ECS) is a highly scalable, high-performance container management service that supports Docker containers and allows you to easily run applications on a managed cluster of Amazon EC2 instances. With Amazon ECS we can install, operate and scale our application with its own cluster management infrastructure. Using some simple API calls, we can launch and stop our Docker-enabled applications, query the logs of our cluster, and access many familiar features like security groups, Elastic Load Balancer, EBS volumes, and IAM roles. We can use Amazon ECS to schedule the placement of containers across our cluster based on our resource needs and availability requirements. We can also integrate our own scheduler or third-party schedulers to meet business or application-specific requirements.**
+2. **Create a Task Definition:**
+   - In the ECS console, navigate to "Task Definitions"
+   - Click "Create new Task Definition"
+   - Select "EC2" as the launch type
+   - Configure the following:
+     - Task Definition Name (e.g., "django-app-task")
+     - Task Role (select appropriate IAM role)
+     - Network Mode (select "Bridge" for this example)
+     - Task Execution Role (create new or use existing)
+     - Task Memory (e.g., 512 MB)
+     - Task CPU (e.g., 256)
+   
+   - Add a container:
+     - Container name (e.g., "django-container")
+     - Image: your_aws_account_id.dkr.ecr.your_region.amazonaws.com/hello-world-django-app:latest
+     - Memory Limits (e.g., 512 MB)
+     - Port mappings: 8000:8000
+     - Add environment variables if needed
+     - Configure logging (use awslogs)
+   
+   - Click "Add" to add the container
+   - Click "Create" to create the task definition
 
-### ECS Steps
+3. **Create a Service:**
+   - Navigate to your cluster
+   - Click "Create" under the Services tab
+   - Configure the following:
+     - Launch Type: EC2
+     - Task Definition: Select the task you created
+     - Service name (e.g., "django-app-service")
+     - Number of tasks: 1 (for initial setup)
+     - Deployment type: Rolling update
+   
+   - Configure networking:
+     - Select your VPC and subnets
+     - Configure security groups to allow traffic on port 8000
+   
+   - Configure auto scaling (optional):
+     - You can start with service auto scaling disabled
+   
+   - Click "Next step" until you reach the review page
+   - Click "Create Service"
 
-Now the time has come to launch our first EC2 instance using AWS ECS. To begin with, let’s first search ECS on AWS console and follows the below steps.
+4. **Run Your Task:**
+   - Once the service is created, it should automatically start running the task
+   - You can also manually run tasks:
+     - Navigate to your cluster
+     - Click "Run new Task"
+     - Select the task definition
+     - Configure task parameters
+     - Click "Run Task"
 
-1. **Create Cluster** — The cluster creation console provides a simple way to create the resources and it lets you customize several common cluster configuration options. Don’t forget to select the region to use your cluster from the navigation pane.
+## Phase 5: Verification and Testing
 
-2. **Launch EC2 instance** — In this step, we are doing the configuration of our cluster. Some of these configurations are Network configuration, CloudWatch Container Insights, and Auto-Scaling groups. This is the most crucial step while creating your cluster because some of the configurations after the creation of the cluster cannot be reverted.
+1. **Verify Task Status:**
+   - Navigate to your cluster in the ECS console
+   - Check the "Tasks" tab to ensure your task is running
+   - If the task is in "RUNNING" state, your container is successfully deployed
 
-3. **Create a Service that runs the task definition** — A service defines how to run your ECS service. Some of the important parameters that are specified in service definition are cluster, launch type, and task definition.
+2. **Access Your Application:**
+   - Find the EC2 instance running your task:
+     - Navigate to the EC2 console
+     - Find the instance associated with your ECS cluster
+     - Copy the public DNS or IP address
+   
+   - Access your application:
+     - Open a web browser
+     - Navigate to http://[your-instance-public-dns]:8000
+     - You should see your Django application running
 
-4. **Create a Task** — To run docker containers on AWS ECR we need to create the task definition first. We can configure multiple containers and data storage in a single task definition. While creating the task definition we specify which ECR to be used for which container and also the port mappings.
+3. **Check Logs:**
+   - Navigate to CloudWatch Logs
+   - Find the log group associated with your ECS task
+   - Review logs for any errors or issues
 
-5. **Run instance by triggering the created task** — After doing all the above steps successfully, we are now at the stage of triggering our created task by entering into the cluster. After running our task we can check in the EC2 console whether our created instance is running or not.
+## Production Considerations
 
-## Congratulazioni! 🙂
+For a production-ready deployment, consider the following additional steps:
 
-**We have Successfully deployed our Django Application on AWS cloud using ECS and ECR.**
+1. **Security Enhancements:**
+   - Configure HTTPS using AWS Certificate Manager and Application Load Balancer
+   - Implement proper IAM roles and permissions
+   - Review security groups to limit access
+   - Use VPC endpoints for private communication
 
-As a Page of victory, check if the Django application is running correctly or not by navigating to the public DNS of the instance in the browser.
+2. **Monitoring and Alerts:**
+   - Set up CloudWatch alarms for resource utilization
+   - Configure alerts for application errors
+   - Implement custom metrics for application health
 
-Many other factors come into play when we deploy a full-fledged Django application on the production server. Some of these factors are as below:
+3. **Load Balancing:**
+   - Configure an Application Load Balancer
+   - Set up target groups for your ECS service
+   - Implement health checks and grace periods
 
-* Security
-* Monitoring
-* Load balancing
-* Recovery Plans
+4. **Recovery Planning:**
+   - Implement regular database backups
+   - Create disaster recovery procedures
+   - Configure auto-scaling for high availability
 
-To fulfill some of these factors, one can also use the `AWS Beanstalk` service to deploy Django apps more efficiently.
+5. **Alternative: AWS Elastic Beanstalk**
+   - For simplified deployment, consider using AWS Elastic Beanstalk as an alternative to manual ECS configuration
+   - Beanstalk handles many infrastructure details automatically
 
-**Happy Learning!**
+## Troubleshooting
 
-## 🛠️ Author & Community  
+### Common Issues and Solutions:
 
-This project is crafted by **[Harshhaa](https://github.com/NotHarshhaa)** 💡.  
-I’d love to hear your feedback! Feel free to share your thoughts.  
+1. **Task fails to start:**
+   - Check the task definition for errors
+   - Review the logs in CloudWatch
+   - Verify IAM permissions are correct
 
-📧 **Connect with me:**
+2. **Cannot access the application:**
+   - Verify security group settings allow traffic on port 8000
+   - Check the instance health in the EC2 console
+   - Confirm the task is in "RUNNING" state
 
-- **GitHub**: [@NotHarshhaa](https://github.com/NotHarshhaa)  
-- **Blog**: [ProDevOpsGuy](https://blog.prodevopsguy.xyz)  
-- **Telegram Community**: [Join Here](https://t.me/prodevopsguy)  
-- **LinkedIn**: [Harshhaa Vardhan Reddy](https://www.linkedin.com/in/harshhaa-vardhan-reddy/)  
+3. **Application errors:**
+   - Review application logs in CloudWatch
+   - Verify environment variables are correctly set
+   - Check database connectivity if applicable
 
----
-
-## ⭐ Support the Project  
-
-If you found this helpful, consider **starring** ⭐ the repository and sharing it with your network! 🚀  
-
-### 📢 Stay Connected  
-
-![Follow Me](https://imgur.com/2j7GSPs.png)
+4. **Image pull failures:**
+   - Verify authentication between ECS and ECR
+   - Check that the image URI is correct in the task definition
+   - Ensure the ECR repository policies allow access
