@@ -57,7 +57,7 @@ sudo systemctl enable docker
 
 #Give docker permission to user
 
-sudo usermod -aG docker $USER || newgrp docker
+sudo usermod -aG docker $USER && newgrp docker
 
   ```
 
